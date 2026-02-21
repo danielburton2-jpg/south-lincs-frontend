@@ -1,161 +1,127 @@
 "use client";
 
-import VersionFooter from "@/app/components/VersionFooter";
-import { useEffect, useMemo, useState } from "react";
+export const dynamic = "force-dynamic";
+
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const SAVED_EMAILS_KEY = "sls_saved_emails";
-const LAST_EMAIL_KEY = "sls_last_email";
+const EMAIL_HISTORY_KEY = "sls_email_history_v1";
 
-function readSavedEmails(): string[] {
-  try {
-    const raw = localStorage.getItem(SAVED_EMAILS_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr.filter((x) => typeof x === "string");
-  } catch {
-    return [];
-  }
-}
+function VersionFooter() {
+  const [version, setVersion] = useState("Loading...");
 
-function writeSavedEmails(emails: string[]) {
-  localStorage.setItem(SAVED_EMAILS_KEY, JSON.stringify(emails));
-}
+  useEffect(() => {
+    async function loadVersion() {
+      try {
+        // ✅ Electron version
+        if (typeof window !== "undefined" && (window as any).electronAPI) {
+          const v = await (window as any).electronAPI.getVersion();
+          setVersion(v);
+          return;
+        }
 
-function saveSuccessfulEmail(email: string) {
-  const normalized = email.trim().toLowerCase();
-  if (!normalized) return;
+        // ✅ Vercel fallback
+        const envVersion = process.env.NEXT_PUBLIC_APP_VERSION;
+        if (envVersion) {
+          setVersion(envVersion);
+          return;
+        }
 
-  const existing = readSavedEmails();
+        setVersion("web");
+      } catch {
+        setVersion("unknown");
+      }
+    }
 
-  // move to top, remove duplicates
-  const next = [normalized, ...existing.filter((e) => e !== normalized)].slice(0, 10);
+    loadVersion();
+  }, []);
 
-  writeSavedEmails(next);
-  localStorage.setItem(LAST_EMAIL_KEY, normalized);
+  return (
+    <div className="pt-4 text-center text-xs text-slate-400">
+      Version: <span className="text-slate-300">{version}</span>
+    </div>
+  );
 }
 
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
-  const [savedEmails, setSavedEmails] = useState<string[]>([]);
-  const [showSaved, setShowSaved] = useState(false);
-
   const [password, setPassword] = useState("");
   const [environment, setEnvironment] = useState("dev");
   const [error, setError] = useState("");
+  const [emailHistory, setEmailHistory] = useState<string[]>([]);
 
-  // load saved emails + last email once
   useEffect(() => {
-    const emails = readSavedEmails();
-    setSavedEmails(emails);
-
-    const last = localStorage.getItem(LAST_EMAIL_KEY);
-    if (last && typeof last === "string") {
-      setEmail(last);
+    const saved = localStorage.getItem(EMAIL_HISTORY_KEY);
+    if (saved) {
+      setEmailHistory(JSON.parse(saved));
     }
   }, []);
 
-  const filteredSaved = useMemo(() => {
-    const q = email.trim().toLowerCase();
-    if (!q) return savedEmails;
-    return savedEmails.filter((e) => e.includes(q));
-  }, [email, savedEmails]);
+  function saveEmail(email: string) {
+    const updated = [email, ...emailHistory.filter((e) => e !== email)].slice(0, 5);
+    setEmailHistory(updated);
+    localStorage.setItem(EMAIL_HISTORY_KEY, JSON.stringify(updated));
+  }
 
-  const handleLogin = () => {
-    setError("");
-
-    if (email === "danielburton2@sky.com" && password === "LucyMaeJack1520.") {
-      // save successful email(s)
-      saveSuccessfulEmail(email);
-
-      // refresh saved list in UI immediately
-      const updated = readSavedEmails();
-      setSavedEmails(updated);
-
+  function handleLogin() {
+    if (
+      email === "danielburton2@sky.com" &&
+      password === "LucyMaeJack1520."
+    ) {
       localStorage.setItem("sls_user", email);
       localStorage.setItem("sls_env", environment);
+
+      saveEmail(email);
+
       router.push(`/${environment}`);
     } else {
       setError("Invalid login details");
     }
-  };
+  }
 
-  const pickEmail = (e: string) => {
-    setEmail(e);
-    setShowSaved(false);
-  };
-
-  const clearSavedEmails = () => {
-    localStorage.removeItem(SAVED_EMAILS_KEY);
-    localStorage.removeItem(LAST_EMAIL_KEY);
-    setSavedEmails([]);
-    setShowSaved(false);
-  };
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    handleLogin();
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="w-full max-w-md bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl p-8 text-white border border-white/10">
-        <h1 className="text-3xl font-bold text-center mb-2">TEST LOGIN FILE</h1>
-        <p className="text-center text-slate-400 mb-6">Secure Environment Access</p>
+        <h1 className="text-3xl font-bold text-center mb-2">
+          South Lincs Systems
+        </h1>
+        <p className="text-center text-slate-400 mb-6">
+          Secure Environment Access
+        </p>
 
-        <div className="space-y-4">
-          {/* Email + saved dropdown */}
-          <div className="relative">
-            <input
-              type="email"
-              placeholder="Email"
-              className="w-full p-3 rounded-lg bg-slate-800 border border-slate-600 focus:outline-none focus:border-blue-500"
-              value={email}
+        <form onSubmit={onSubmit} className="space-y-4">
+
+          {emailHistory.length > 0 && (
+            <select
               onChange={(e) => setEmail(e.target.value)}
-              onFocus={() => setShowSaved(true)}
-              onBlur={() => {
-                // small delay so click works
-                setTimeout(() => setShowSaved(false), 150);
-              }}
-            />
+              className="w-full p-3 rounded-lg bg-slate-800 border border-slate-600"
+            >
+              <option value="">Select saved email...</option>
+              {emailHistory.map((e) => (
+                <option key={e} value={e}>{e}</option>
+              ))}
+            </select>
+          )}
 
-            {showSaved && savedEmails.length > 0 && (
-              <div className="absolute z-50 mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 shadow-xl overflow-hidden">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800">
-                  <span className="text-xs text-slate-400">Saved emails</span>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={clearSavedEmails}
-                    className="text-xs text-red-400 hover:text-red-300"
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                {filteredSaved.length === 0 ? (
-                  <div className="px-3 py-2 text-sm text-slate-400">No matches</div>
-                ) : (
-                  <div className="max-h-44 overflow-auto">
-                    {filteredSaved.map((e) => (
-                      <button
-                        key={e}
-                        type="button"
-                        onMouseDown={(ev) => ev.preventDefault()}
-                        onClick={() => pickEmail(e)}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-800"
-                      >
-                        {e}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <input
+            type="email"
+            placeholder="Email"
+            className="w-full p-3 rounded-lg bg-slate-800 border border-slate-600"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
           <input
             type="password"
             placeholder="Password"
-            className="w-full p-3 rounded-lg bg-slate-800 border border-slate-600 focus:outline-none focus:border-blue-500"
+            className="w-full p-3 rounded-lg bg-slate-800 border border-slate-600"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -170,17 +136,19 @@ export default function LoginPage() {
             <option value="live">Live</option>
           </select>
 
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          {error && (
+            <p className="text-red-400 text-sm text-center">{error}</p>
+          )}
 
           <button
-            onClick={handleLogin}
+            type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 transition rounded-lg p-3 font-semibold"
           >
             Login
           </button>
 
           <VersionFooter />
-        </div>
+        </form>
       </div>
     </div>
   );
