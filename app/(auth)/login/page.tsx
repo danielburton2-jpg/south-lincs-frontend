@@ -1,5 +1,5 @@
 "use client";
-
+import VersionFooter from "@/app/components/VersionFooter";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -71,6 +71,7 @@ const handleLogin = () => {
           >
             Login
           </button>
+          <VersionFooter />
         </div>
       </div>
     </div>
